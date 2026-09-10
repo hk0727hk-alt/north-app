@@ -39,9 +39,15 @@ export function renderVehicleDetail({ id }) {
       if (!logs.length) { tabBody.appendChild(emptyMsg("日報の記録がありません")); return; }
       logs.forEach((log) => {
         const u = getUser(log.userId);
+        const startCell = log.startOdometer != null
+          ? `${log.startOdometer}`
+          : log.startOdometerPhoto ? h("img", { src: log.startOdometerPhoto, style: "width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;" }) : "-";
+        const endCell = log.endOdometer != null
+          ? `${log.endOdometer}`
+          : log.endOdometerPhoto ? h("img", { src: log.endOdometerPhoto, style: "width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;" }) : "未終了";
         tabBody.appendChild(h("div", { class: "card" }, [
           h("div", { class: "kv-row" }, [h("span", { class: "k" }, formatJP(log.date)), h("span", { class: "v" }, u?.name || "-")]),
-          h("div", { class: "kv-row" }, [h("span", { class: "k" }, "走行距離"), h("span", { class: "v" }, `${log.startOdometer ?? "-"} → ${log.endOdometer ?? "未終了"} km`)]),
+          h("div", { class: "kv-row" }, [h("span", { class: "k" }, "走行距離（km）"), h("span", { class: "v", style: "display:flex; align-items:center; gap:6px;" }, [startCell, " → ", endCell])]),
           log.hasIssue ? h("div", { class: "kv-row" }, [h("span", { class: "k" }, "異常"), statusBadge("異常")]) : null,
           log.memo ? h("div", { style: "margin-top:6px; font-size:13px; color:var(--color-text-sub);" }, log.memo) : null,
         ]));

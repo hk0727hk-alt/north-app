@@ -71,14 +71,16 @@ export function getTodayOpenLog(vehicleId) {
   ) || null;
 }
 
-export async function addLog({ vehicleId, userId, date, startOdometer, hasIssue, memo }) {
+export async function addLog({ vehicleId, userId, date, startOdometer, startOdometerPhoto, hasIssue, memo }) {
   const log = {
     id: makeId("log"),
     vehicleId,
     userId,
     date: date || todayStr(),
     startOdometer: startOdometer != null ? Number(startOdometer) : null,
+    startOdometerPhoto: startOdometerPhoto || null,
     endOdometer: null,
+    endOdometerPhoto: null,
     hasIssue: !!hasIssue,
     memo: memo || "",
     createdAt: new Date().toISOString(),
@@ -88,10 +90,13 @@ export async function addLog({ vehicleId, userId, date, startOdometer, hasIssue,
   return log;
 }
 
-export async function closeLog(logId, { endOdometer }) {
+export async function closeLog(logId, { endOdometer, endOdometerPhoto }) {
   const log = readCollection("vehicleLogs").find((l) => l.id === logId);
   if (!log) return null;
-  const patch = { endOdometer: endOdometer != null ? Number(endOdometer) : null };
+  const patch = {
+    endOdometer: endOdometer != null ? Number(endOdometer) : null,
+    endOdometerPhoto: endOdometerPhoto || null,
+  };
   await updateDoc("vehicleLogs", logId, patch);
   await updateVehicle(log.vehicleId, { status: "稼働中" });
   return { ...log, ...patch };
