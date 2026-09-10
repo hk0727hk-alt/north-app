@@ -1,0 +1,69 @@
+import { h } from "../utils/dom.js";
+import { navigate } from "../router.js";
+import { getMasterPin, setMasterPin } from "../db/users.js";
+import { getAccessCode, setAccessCode } from "../db/access.js";
+import { resetAllData } from "../db/storage.js";
+import { showToast } from "../components/toast.js";
+import { confirmDialog } from "../components/modal.js";
+import { logout } from "../db/session.js";
+
+export function renderSettings() {
+  const pinInput = h("input", { type: "text", inputmode: "numeric", maxlength: 4, value: getMasterPin(), placeholder: "4桁の数字" });
+  const accessInput = h("input", { type: "text", inputmode: "numeric", maxlength: 4, value: getAccessCode(), placeholder: "4桁の数字" });
+
+  async function savePin() {
+    const v = pinInput.value.trim();
+    if (!/^\d{4}$/.test(v)) { showToast("4桁の数字を入力してください"); return; }
+    await setMasterPin(v);
+    showToast("PINを変更しました");
+  }
+
+  function saveAccessCode() {
+    const v = accessInput.value.trim();
+    if (!/^\d{4}$/.test(v)) { showToast("4桁の数字を入力してください"); return; }
+    setAccessCode(v);
+    showToast("合言葉を変更しました");
+  }
+
+  async function reset() {
+    const ok = await confirmDialog({
+      title: "データを初期化",
+      message: "全てのデータ（車両・道具・履歴・ユーザー）を初期状態に戻します。よろしいですか？",
+      danger: true,
+      okLabel: "初期化する",
+    });
+    if (ok) {
+      await resetAllData();
+      logout();
+      showToast("初期化しました");
+      navigate("/login");
+    }
+  }
+
+  return h("div", { class: "page" }, [
+    h("div", { class: "page-title" }, "アプリ設定"),
+    h("div", { class: "card" }, [
+      h("div", { class: "kv-row" }, [
+        h("span", { class: "k" }, "データの保存先"),
+        h("span", { class: "v" }, "この端末のみ（ブラウザ内）"),
+      ]),
+      h("div", { class: "field-hint", style: "margin-top:6px;" }, "開いた端末ごとに別々のデータになります。他の人と同じデータを見るには本格運用サーバーが必要です。"),
+    ]),
+    h("div", { class: "section-title" }, "アプリの入室合言葉"),
+    h("div", { class: "card" }, [
+      h("div", { class: "field-hint", style: "margin-bottom:10px;" }, "アプリを開くときに全員が入力する合言葉です。従業員に共有してください。"),
+      h("div", { class: "field" }, [h("label", {}, "合言葉（4桁）"), accessInput]),
+      h("button", { class: "btn btn-primary", onclick: saveAccessCode }, "合言葉を変更する"),
+    ]),
+    h("div", { class: "section-title" }, "マスター管理者PIN"),
+    h("div", { class: "card" }, [
+      h("div", { class: "field" }, [h("label", {}, "PINコード（4桁）"), pinInput]),
+      h("button", { class: "btn btn-primary", onclick: savePin }, "PINを変更する"),
+    ]),
+    h("div", { class: "section-title" }, "データ管理"),
+    h("div", { class: "card" }, [
+      h("div", { class: "field-hint", style: "margin-bottom:12px;" }, "テスト用にデータを初期状態へ戻します。実運用データも削除されるため注意してください。"),
+      h("button", { class: "btn btn-danger", onclick: reset }, "全データを初期化"),
+    ]),
+  ]);
+}
