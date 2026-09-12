@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $jsRoot = Join-Path $root "js"
 
@@ -65,3 +65,37 @@ foreach ($rel in $order) {
 $outPath = Join-Path $root "dist-bundle.js"
 [System.IO.File]::WriteAllText($outPath, $sb.ToString(), (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "Wrote $outPath"
+
+$resetCss = Get-Content -Path (Join-Path $root "css/reset.css") -Raw -Encoding UTF8
+$mainCss = Get-Content -Path (Join-Path $root "css/main.css") -Raw -Encoding UTF8
+
+$html = @"
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>North業務アプリ</title>
+<meta name="theme-color" content="#0b4f6c" />
+<style>
+$resetCss
+
+$mainCss
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+$($sb.ToString())</script>
+</body>
+</html>
+"@
+
+$indexPath = Join-Path $root "index.html"
+[System.IO.File]::WriteAllText($indexPath, $html, (New-Object System.Text.UTF8Encoding($false)))
+Write-Host "Wrote $indexPath (bundled, for GitHub Pages)"
+
+$artifactHtml = "<title>North業務アプリ</title>`n<style>`n$resetCss`n$mainCss`n</style>`n<div id=`"app`"></div>`n<script type=`"module`">`n$($sb.ToString())</script>`n"
+$artifactPath = Join-Path $root "artifact.html"
+[System.IO.File]::WriteAllText($artifactPath, $artifactHtml, (New-Object System.Text.UTF8Encoding($false)))
+Write-Host "Wrote $artifactPath"
