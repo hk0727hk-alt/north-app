@@ -143,7 +143,7 @@ function withTimeout(promise, ms) {
 }
 
 export async function initStore() {
-  await withTimeout(ensureSeeded(), 6000);
+  await withTimeout(ensureSeeded(), 3500);
   subscribeAll();
   await withTimeout(
     new Promise((resolve) => {
@@ -153,7 +153,7 @@ export async function initStore() {
         if (remaining <= 0) { unsub(); resolve(); }
       });
     }),
-    4000
+    2500
   );
 }
 

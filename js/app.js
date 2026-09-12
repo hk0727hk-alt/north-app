@@ -83,20 +83,38 @@ function registerAllRoutes() {
 let storeReady = false;
 let appStarted = false;
 
+function showLoadingScreen(appEl, onSkip) {
+  const skipBtn = h("button", {
+    class: "btn btn-outline",
+    style: "margin-top:20px; max-width:240px;",
+    onclick: onSkip,
+  }, "そのまま進む");
+  skipBtn.hidden = true;
+
+  appEl.replaceChildren(h("div", { class: "page empty-state" }, [
+    h("div", { class: "icon" }, "⏳"),
+    h("div", { class: "msg" }, "読み込み中..."),
+    skipBtn,
+  ]));
+
+  const t = setTimeout(() => { skipBtn.hidden = false; }, 3000);
+  return () => clearTimeout(t);
+}
+
 async function boot() {
   const appEl = document.getElementById("app");
 
   if (!storeReady) {
-    appEl.replaceChildren(h("div", { class: "page empty-state" }, [
-      h("div", { class: "icon" }, "⏳"),
-      h("div", { class: "msg" }, "読み込み中..."),
-    ]));
+    let skip;
+    const skipped = new Promise((resolve) => { skip = resolve; });
+    const cancelTimer = showLoadingScreen(appEl, skip);
     try {
-      await initStore();
+      await Promise.race([initStore(), skipped]);
     } catch {
       // initStore() already falls back internally; this is a last-resort guard
       // so the app never gets stuck on the loading screen.
     }
+    cancelTimer();
     storeReady = true;
   }
 
