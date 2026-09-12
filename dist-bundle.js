@@ -239,21 +239,33 @@ function subscribeAll() {
   );
 }
 
+function withTimeout(promise, ms) {
+  return new Promise((resolve) => {
+    let done = false;
+    const t = setTimeout(() => { if (!done) { done = true; resolve(); } }, ms);
+    promise.then(
+      () => { if (!done) { done = true; clearTimeout(t); resolve(); } },
+      (err) => {
+        if (!done) { done = true; clearTimeout(t); resolve(); }
+        console.error("Firestore call failed or timed out", err);
+      }
+    );
+  });
+}
+
 async function initStore() {
-  try {
-    await ensureSeeded();
-    subscribeAll();
-    await new Promise((resolve) => {
+  await withTimeout(ensureSeeded(), 6000);
+  subscribeAll();
+  await withTimeout(
+    new Promise((resolve) => {
       let remaining = COLLECTIONS.length;
       const unsub = onDataChange(() => {
         remaining -= 1;
         if (remaining <= 0) { unsub(); resolve(); }
       });
-      setTimeout(resolve, 5000);
-    });
-  } catch (err) {
-    console.error("Firestore initialization failed", err);
-  }
+    }),
+    4000
+  );
 }
 
 function readCollection(name) {
