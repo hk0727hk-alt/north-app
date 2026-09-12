@@ -80,8 +80,25 @@ function registerAllRoutes() {
   });
 }
 
+let storeReady = false;
+let appStarted = false;
+
 async function boot() {
   const appEl = document.getElementById("app");
+
+  if (!storeReady) {
+    appEl.replaceChildren(h("div", { class: "page empty-state" }, [
+      h("div", { class: "icon" }, "⏳"),
+      h("div", { class: "msg" }, "読み込み中..."),
+    ]));
+    try {
+      await initStore();
+    } catch {
+      // initStore() already falls back internally; this is a last-resort guard
+      // so the app never gets stuck on the loading screen.
+    }
+    storeReady = true;
+  }
 
   if (!isUnlocked()) {
     appEl.replaceChildren(renderAccessGate({
@@ -90,18 +107,8 @@ async function boot() {
     return;
   }
 
-  appEl.replaceChildren(h("div", { class: "page empty-state" }, [
-    h("div", { class: "icon" }, "⏳"),
-    h("div", { class: "msg" }, "読み込み中..."),
-  ]));
-
-  try {
-    await initStore();
-  } catch {
-    // initStore() already falls back internally; this is a last-resort guard
-    // so the app never gets stuck on the loading screen.
-  }
-
+  if (appStarted) return;
+  appStarted = true;
   registerAllRoutes();
   mountHeader(document.body);
   mountBottomNav(document.body);

@@ -109,9 +109,38 @@ function fileToCompressedDataUrl(file, maxSize = 700, quality = 0.55) {
 }
 
 // ==== db/storage.js ====
-const PREFIX = "northApp:";
-const COLLECTIONS = ["users", "vehicles", "vehicleLogs", "vehicleInspections", "vehicleIssues", "tools", "toolCheckouts"];
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  doc,
+  onSnapshot,
+  setDoc as fsSetDoc,
+  updateDoc as fsUpdateDoc,
+  deleteDoc as fsDeleteDoc,
+  getDoc,
+  getDocs,
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
+const firebaseConfig = {
+  apiKey: "AIzaSyAtcgZII2a3grevgwOGdEbXKpCT_va4Keo",
+  authDomain: "north-app-web.firebaseapp.com",
+  projectId: "north-app-web",
+  storageBucket: "north-app-web.firebasestorage.app",
+  messagingSenderId: "778390264817",
+  appId: "1:778390264817:web:1897b2f50bc8e7b374c250",
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+
+const LOCAL_PREFIX = "northApp:";
+const COLLECTIONS = ["users", "vehicles", "vehicleLogs", "vehicleInspections", "vehicleIssues", "tools", "toolCheckouts"];
+const CONFIG_COLLECTION = "config";
+const CONFIG_DOC_ID = "app";
+const LOCAL_ONLY_KEYS = new Set(["currentUserId", "unlocked"]);
+
+const cache = { config: { masterPin: "0000", accessCode: "0000" } };
 const dataListeners = new Set();
 
 function notify() {
@@ -124,7 +153,7 @@ function onDataChange(cb) {
 }
 
 function localKey(name) {
-  return PREFIX + name;
+  return LOCAL_PREFIX + name;
 }
 
 function localRead(name, fallback) {
@@ -173,57 +202,106 @@ function seedData() {
   };
 }
 
-function ensureLocalSeeded() {
-  if (localRead("seeded", false)) return;
+async function ensureSeeded() {
+  const configRef = doc(db, CONFIG_COLLECTION, CONFIG_DOC_ID);
+  const snap = await getDoc(configRef);
+  if (snap.exists() && snap.data()?.seeded) return;
+
   const seed = seedData();
-  for (const name of COLLECTIONS) localWrite(name, seed[name]);
-  localWrite("masterPin", "0000");
-  localWrite("seeded", true);
+  const writes = [];
+  for (const name of COLLECTIONS) {
+    for (const item of seed[name]) {
+      writes.push(fsSetDoc(doc(db, name, item.id), item));
+    }
+  }
+  await Promise.all(writes);
+  await fsSetDoc(configRef, { masterPin: "0000", accessCode: "0000", seeded: true });
+}
+
+function subscribeAll() {
+  for (const name of COLLECTIONS) {
+    onSnapshot(
+      collection(db, name),
+      (snap) => {
+        cache[name] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        notify();
+      },
+      () => { /* transient errors recover on their own */ }
+    );
+  }
+  onSnapshot(
+    doc(db, CONFIG_COLLECTION, CONFIG_DOC_ID),
+    (snap) => {
+      cache.config = snap.exists() ? snap.data() : { masterPin: "0000", accessCode: "0000" };
+      notify();
+    },
+    () => {}
+  );
 }
 
 async function initStore() {
-  ensureLocalSeeded();
+  try {
+    await ensureSeeded();
+    subscribeAll();
+    await new Promise((resolve) => {
+      let remaining = COLLECTIONS.length;
+      const unsub = onDataChange(() => {
+        remaining -= 1;
+        if (remaining <= 0) { unsub(); resolve(); }
+      });
+      setTimeout(resolve, 5000);
+    });
+  } catch (err) {
+    console.error("Firestore initialization failed", err);
+  }
 }
 
 function readCollection(name) {
-  return localRead(name, []);
+  return cache[name] || [];
 }
 
 function readValue(name, fallback = null) {
-  return localRead(name, fallback);
+  if (LOCAL_ONLY_KEYS.has(name)) return localRead(name, fallback);
+  if (name === "masterPin") return (cache.config && cache.config.masterPin) || "0000";
+  if (name === "accessCode") return (cache.config && cache.config.accessCode) || "0000";
+  return fallback;
 }
 
 function writeValue(name, val) {
-  localWrite(name, val);
+  if (LOCAL_ONLY_KEYS.has(name)) { localWrite(name, val); return; }
+  if (name === "masterPin" || name === "accessCode") {
+    fsUpdateDoc(doc(db, CONFIG_COLLECTION, CONFIG_DOC_ID), { [name]: val }).catch(() => {});
+  }
 }
 
 async function addDoc(name, id, data) {
-  const arr = localRead(name, []);
-  arr.push(data);
-  localWrite(name, arr);
-  notify();
+  await fsSetDoc(doc(db, name, id), data);
   return data;
 }
 
 async function updateDoc(name, id, patch) {
-  const arr = localRead(name, []);
-  const idx = arr.findIndex((x) => x.id === id);
-  if (idx !== -1) {
-    arr[idx] = { ...arr[idx], ...patch };
-    localWrite(name, arr);
-    notify();
-  }
+  await fsUpdateDoc(doc(db, name, id), patch);
 }
 
 async function deleteDoc(name, id) {
-  localWrite(name, localRead(name, []).filter((x) => x.id !== id));
-  notify();
+  await fsDeleteDoc(doc(db, name, id));
 }
 
 async function resetAllData() {
-  Object.keys(localStorage).filter((k) => k.startsWith(PREFIX)).forEach((k) => localStorage.removeItem(k));
-  ensureLocalSeeded();
-  notify();
+  const deletions = [];
+  for (const name of COLLECTIONS) {
+    const snap = await getDocs(collection(db, name));
+    snap.forEach((d) => deletions.push(fsDeleteDoc(d.ref)));
+  }
+  await Promise.all(deletions);
+
+  const seed = seedData();
+  const writes = [];
+  for (const name of COLLECTIONS) {
+    for (const item of seed[name]) writes.push(fsSetDoc(doc(db, name, item.id), item));
+  }
+  await Promise.all(writes);
+  await fsSetDoc(doc(db, CONFIG_COLLECTION, CONFIG_DOC_ID), { masterPin: "0000", accessCode: "0000", seeded: true });
 }
 
 // ==== db/users.js ====
@@ -1069,7 +1147,7 @@ function renderSettings() {
   async function reset() {
     const ok = await confirmDialog({
       title: "データを初期化",
-      message: "全てのデータ（車両・道具・履歴・ユーザー）を初期状態に戻します。よろしいですか？",
+      message: "全員で共有している車両・道具・履歴・ユーザーのデータを初期状態に戻します。使っている全員に影響します。よろしいですか？",
       danger: true,
       okLabel: "初期化する",
     });
@@ -1086,9 +1164,9 @@ function renderSettings() {
     h("div", { class: "card" }, [
       h("div", { class: "kv-row" }, [
         h("span", { class: "k" }, "データの保存先"),
-        h("span", { class: "v" }, "この端末のみ（ブラウザ内）"),
+        h("span", { class: "v" }, "全員で共有中"),
       ]),
-      h("div", { class: "field-hint", style: "margin-top:6px;" }, "開いた端末ごとに別々のデータになります。他の人と同じデータを見るには本格運用サーバーが必要です。"),
+      h("div", { class: "field-hint", style: "margin-top:6px;" }, "アプリを開いた全員が同じ車両・道具・履歴のデータを見ています。"),
     ]),
     h("div", { class: "section-title" }, "アプリの入室合言葉"),
     h("div", { class: "card" }, [
@@ -2278,8 +2356,25 @@ function registerAllRoutes() {
   });
 }
 
+let storeReady = false;
+let appStarted = false;
+
 async function boot() {
   const appEl = document.getElementById("app");
+
+  if (!storeReady) {
+    appEl.replaceChildren(h("div", { class: "page empty-state" }, [
+      h("div", { class: "icon" }, "⏳"),
+      h("div", { class: "msg" }, "読み込み中..."),
+    ]));
+    try {
+      await initStore();
+    } catch {
+      // initStore() already falls back internally; this is a last-resort guard
+      // so the app never gets stuck on the loading screen.
+    }
+    storeReady = true;
+  }
 
   if (!isUnlocked()) {
     appEl.replaceChildren(renderAccessGate({
@@ -2288,18 +2383,8 @@ async function boot() {
     return;
   }
 
-  appEl.replaceChildren(h("div", { class: "page empty-state" }, [
-    h("div", { class: "icon" }, "⏳"),
-    h("div", { class: "msg" }, "読み込み中..."),
-  ]));
-
-  try {
-    await initStore();
-  } catch {
-    // initStore() already falls back internally; this is a last-resort guard
-    // so the app never gets stuck on the loading screen.
-  }
-
+  if (appStarted) return;
+  appStarted = true;
   registerAllRoutes();
   mountHeader(document.body);
   mountBottomNav(document.body);

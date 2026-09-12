@@ -28,7 +28,7 @@ export function renderSettings() {
   async function reset() {
     const ok = await confirmDialog({
       title: "データを初期化",
-      message: "全てのデータ（車両・道具・履歴・ユーザー）を初期状態に戻します。よろしいですか？",
+      message: "全員で共有している車両・道具・履歴・ユーザーのデータを初期状態に戻します。使っている全員に影響します。よろしいですか？",
       danger: true,
       okLabel: "初期化する",
     });
@@ -45,9 +45,9 @@ export function renderSettings() {
     h("div", { class: "card" }, [
       h("div", { class: "kv-row" }, [
         h("span", { class: "k" }, "データの保存先"),
-        h("span", { class: "v" }, "この端末のみ（ブラウザ内）"),
+        h("span", { class: "v" }, "全員で共有中"),
       ]),
-      h("div", { class: "field-hint", style: "margin-top:6px;" }, "開いた端末ごとに別々のデータになります。他の人と同じデータを見るには本格運用サーバーが必要です。"),
+      h("div", { class: "field-hint", style: "margin-top:6px;" }, "アプリを開いた全員が同じ車両・道具・履歴のデータを見ています。"),
     ]),
     h("div", { class: "section-title" }, "アプリの入室合言葉"),
     h("div", { class: "card" }, [
