@@ -64,10 +64,15 @@ function render() {
   app.scrollTop = 0;
   window.scrollTo(0, 0);
   let node;
-  if (matched) {
-    node = matched.route.render(matched.params);
-  } else {
-    node = notFoundRender();
+  try {
+    node = matched ? matched.route.render(matched.params) : notFoundRender();
+  } catch (err) {
+    console.error("Page render failed", err);
+    const errBox = document.createElement("div");
+    errBox.className = "page empty-state";
+    errBox.style.wordBreak = "break-all";
+    errBox.textContent = "表示エラー: " + (err && err.message ? err.message : String(err));
+    node = errBox;
   }
   app.replaceChildren(node);
   onRouteChange({ path, opts: matched ? matched.route.opts : {} });

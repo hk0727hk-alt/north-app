@@ -17,7 +17,15 @@ const cache = { config: { masterPin: "0000", accessCode: "0000" } };
 const dataListeners = new Set();
 
 function notify() {
-  dataListeners.forEach((cb) => { try { cb(); } catch { /* ignore listener errors */ } });
+  dataListeners.forEach((cb) => {
+    try {
+      cb();
+    } catch (err) {
+      // A render error here must never be swallowed silently — it was
+      // previously invisible and made the whole page look permanently stuck.
+      console.error("onDataChange listener threw", err);
+    }
+  });
 }
 
 export function onDataChange(cb) {

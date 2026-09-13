@@ -1,29 +1,3 @@
-// TEMP DIAGNOSTIC: runs immediately when this module loads, independent of
-// everything else below, to check whether a bare fetch()+setInterval works
-// when this code is loaded as part of the app's real module graph.
-(function diagBlock() {
-  const box = document.createElement("div");
-  box.style.cssText = "position:fixed; top:0; left:0; right:0; z-index:99999; background:#000; color:#0f0; font-size:12px; padding:6px; font-family:monospace; white-space:pre-wrap; word-break:break-all;";
-  box.textContent = "diag: starting...";
-  document.body.appendChild(box);
-  let sec = 0;
-  setInterval(() => {
-    sec += 1;
-    box.textContent = box.textContent.replace(/^diag:.*?\n/, "") ;
-    box.textContent = `diag sec=${sec}\n` + box.textContent.split("\n").slice(1).join("\n");
-  }, 1000);
-  box.textContent = "diag sec=0\nfetch: pending...";
-  const t0 = Date.now();
-  fetch("https://firestore.googleapis.com/v1/projects/north-app-web/databases/(default)/documents/users?pageSize=300&key=AIzaSyAtcgZII2a3grevgwOGdEbXKpCT_va4Keo")
-    .then((r) => r.json())
-    .then((d) => {
-      box.textContent = box.textContent.split("\n")[0] + `\nfetch: OK ${Date.now() - t0}ms n=${(d.documents || []).length}`;
-    })
-    .catch((e) => {
-      box.textContent = box.textContent.split("\n")[0] + `\nfetch: ERR ${Date.now() - t0}ms ${e.message}`;
-    });
-})();
-
 import { registerRoute, setNotFound, onNavigate, navigate, startRouter } from "./router.js";
 import { initStore } from "./db/storage.js";
 import { getCurrentUser, isManager, isMaster } from "./db/session.js";
