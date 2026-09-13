@@ -5,7 +5,8 @@ import { getAccessCode, setAccessCode } from "../db/access.js";
 import { resetAllData } from "../db/storage.js";
 import { showToast } from "../components/toast.js";
 import { confirmDialog } from "../components/modal.js";
-import { logout } from "../db/session.js";
+import { askPin } from "../components/pinPad.js";
+import { logout, getCurrentUser, isMaster } from "../db/session.js";
 
 export function renderSettings() {
   const pinInput = h("input", { type: "text", inputmode: "numeric", maxlength: 4, value: getMasterPin(), placeholder: "4桁の数字" });
@@ -26,6 +27,19 @@ export function renderSettings() {
   }
 
   async function reset() {
+    // Re-check at the moment of action, not just when the page was opened,
+    // and require the master PIN again so an unattended logged-in phone
+    // cannot wipe everyone's shared data.
+    if (!isMaster(getCurrentUser())) {
+      showToast("初期化はマスター管理者のみ実行できます");
+      return;
+    }
+    const pin = await askPin({ title: "初期化するにはマスターPINを入力" });
+    if (pin === null) return;
+    if (pin !== getMasterPin()) {
+      showToast("PINが違います");
+      return;
+    }
     const ok = await confirmDialog({
       title: "データを初期化",
       message: "全員で共有している車両・道具・履歴・ユーザーのデータを初期状態に戻します。使っている全員に影響します。よろしいですか？",
