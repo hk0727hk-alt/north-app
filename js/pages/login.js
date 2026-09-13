@@ -46,7 +46,8 @@ export function renderLogin() {
           h("div", { class: "icon" }, "⏳"),
           h("div", { class: "msg" }, "データを取得中、または通信エラーです。少し待ってから再読み込みしてください。"),
           err ? h("div", { class: "field-hint", style: "margin-top:10px; color:var(--color-danger); word-break:break-all;" }, `エラー内容: ${err}`) : null,
-          h("div", { class: "field-hint", style: "margin-top:10px; word-break:break-all;" }, `診断情報: 最終更新=${diag.lastRefreshAt || "未実行"} / 件数=${JSON.stringify(diag.counts)}`),
+          h("div", { class: "field-hint", style: "margin-top:10px; word-break:break-all;" }, `診断情報: 開始=${diag.refreshStartedAt || "未実行"} / 最終更新=${diag.lastRefreshAt || "未完了"} / 取得中=${diag.currentlyFetching || "なし"}`),
+          h("div", { class: "field-hint", style: "margin-top:6px; word-break:break-all;" }, `件数=${JSON.stringify(diag.counts)}`),
         ])
       : null,
     grid,

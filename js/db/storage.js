@@ -88,7 +88,7 @@ function fromFirestoreFields(fields) {
 }
 
 /* --- Plain REST calls (no SDK, no persistent connection) --- */
-async function fetchWithTimeout(url, options, ms = 8000) {
+async function fetchWithTimeout(url, options, ms = 6000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), ms);
   try {
@@ -180,11 +180,15 @@ async function ensureSeeded() {
 
 let pollTimer = null;
 let lastRefreshAt = null;
+let refreshStartedAt = null;
+let currentlyFetching = null;
 const lastErrors = {};
 
 export function getDiagnostics() {
   return {
     lastRefreshAt,
+    refreshStartedAt,
+    currentlyFetching,
     counts: Object.fromEntries(COLLECTIONS.map((name) => [name, (cache[name] || []).length])),
     errors: { ...lastErrors },
   };
@@ -202,17 +206,26 @@ function describeError(err) {
 }
 
 async function refreshAll() {
-  const results = await Promise.allSettled(COLLECTIONS.map((name) => fsListCollection(name)));
-  results.forEach((result, i) => {
-    const name = COLLECTIONS[i];
-    if (result.status === "fulfilled") {
-      cache[name] = result.value;
+  // Fetch one collection at a time (not in parallel) — some networks appear
+  // to stall when several requests to the same host fire simultaneously.
+  // Update the cache and notify after each one so partial progress shows up
+  // immediately instead of waiting on the slowest/stuck request.
+  refreshStartedAt = new Date().toISOString();
+  for (const name of COLLECTIONS) {
+    currentlyFetching = name;
+    notify();
+    try {
+      cache[name] = await fsListCollection(name);
       delete lastErrors[name];
-    } else {
-      console.error(`Firestore refresh failed for ${name}`, result.reason);
-      lastErrors[name] = describeError(result.reason);
+    } catch (err) {
+      console.error(`Firestore refresh failed for ${name}`, err);
+      lastErrors[name] = describeError(err);
     }
-  });
+    lastRefreshAt = new Date().toISOString();
+    notify();
+  }
+  currentlyFetching = "config";
+  notify();
   try {
     const config = await fsGetDoc(CONFIG_COLLECTION, CONFIG_DOC_ID);
     cache.config = config || { masterPin: "0000", accessCode: "0000" };
@@ -221,7 +234,7 @@ async function refreshAll() {
     console.error("Firestore config refresh failed", err);
     lastErrors.config = describeError(err);
   }
-  lastRefreshAt = new Date().toISOString();
+  currentlyFetching = null;
   notify();
 }
 
