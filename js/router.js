@@ -56,13 +56,16 @@ function matchRoute(path) {
   return null;
 }
 
-function render() {
+function render({ fromData = false } = {}) {
   if (liveUnsub) { liveUnsub(); liveUnsub = null; }
   const path = currentPath();
   const matched = matchRoute(path);
   const app = document.getElementById("app");
-  app.scrollTop = 0;
-  window.scrollTo(0, 0);
+  // A data-driven re-render must keep the user's scroll position.
+  if (!fromData) {
+    app.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }
   let node;
   try {
     node = matched ? matched.route.render(matched.params) : notFoundRender();
@@ -77,7 +80,7 @@ function render() {
   app.replaceChildren(node);
   onRouteChange({ path, opts: matched ? matched.route.opts : {} });
   if (matched && matched.route.opts.live) {
-    liveUnsub = onDataChange(() => render());
+    liveUnsub = onDataChange(() => render({ fromData: true }));
   }
 }
 

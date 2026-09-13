@@ -17,7 +17,11 @@ const cache = { config: { masterPin: "0000", accessCode: "0000" } };
 const dataListeners = new Set();
 
 function notify() {
-  dataListeners.forEach((cb) => {
+  // Iterate over a snapshot: the router re-subscribes a fresh listener on every
+  // render, and Set.forEach visits entries added mid-iteration — iterating the
+  // live Set turned the first data update into an endless synchronous render
+  // loop that froze the page.
+  [...dataListeners].forEach((cb) => {
     try {
       cb();
     } catch (err) {
@@ -218,15 +222,27 @@ function describeError(err) {
   return err?.message || String(err);
 }
 
+// Firestore REST returns map fields in no guaranteed order, so a plain
+// JSON.stringify would report "changed" on identical data.
+function stableStringify(v) {
+  if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+  if (v && typeof v === "object") {
+    return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + stableStringify(v[k])).join(",") + "}";
+  }
+  return JSON.stringify(v ?? null);
+}
+
 async function refreshAll() {
   // Fetch one collection at a time (not in parallel) — some networks appear
   // to stall when several requests to the same host fire simultaneously.
   // Update the cache and notify after each one so partial progress shows up
   // immediately instead of waiting on the slowest/stuck request.
+  // Only notify when data or error state actually changed — re-rendering every
+  // few seconds regardless kept resetting the page under the user.
   refreshStartedAt = new Date().toISOString();
   for (const name of COLLECTIONS) {
     currentlyFetching = name;
-    notify();
+    const before = stableStringify([cache[name], lastErrors[name]]);
     try {
       cache[name] = await fsListCollection(name);
       delete lastErrors[name];
@@ -235,10 +251,10 @@ async function refreshAll() {
       lastErrors[name] = describeError(err);
     }
     lastRefreshAt = new Date().toISOString();
-    notify();
+    if (stableStringify([cache[name], lastErrors[name]]) !== before) notify();
   }
   currentlyFetching = "config";
-  notify();
+  const configBefore = stableStringify([cache.config, lastErrors.config]);
   try {
     const config = await fsGetDoc(CONFIG_COLLECTION, CONFIG_DOC_ID);
     cache.config = config || { masterPin: "0000", accessCode: "0000" };
@@ -248,7 +264,7 @@ async function refreshAll() {
     lastErrors.config = describeError(err);
   }
   currentlyFetching = null;
-  notify();
+  if (stableStringify([cache.config, lastErrors.config]) !== configBefore) notify();
 }
 
 function startPolling() {
