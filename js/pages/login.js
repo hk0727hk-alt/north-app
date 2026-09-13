@@ -2,7 +2,7 @@ import { h } from "../utils/dom.js";
 import { navigate } from "../router.js";
 import { listUsers, getMasterPin } from "../db/users.js";
 import { setCurrentUser, getCurrentUser } from "../db/session.js";
-import { getLastError } from "../db/storage.js";
+import { getLastError, getDiagnostics } from "../db/storage.js";
 import { askPin } from "../components/pinPad.js";
 import { showToast } from "../components/toast.js";
 
@@ -36,6 +36,7 @@ export function renderLogin() {
   ])));
 
   const err = getLastError();
+  const diag = getDiagnostics();
 
   return h("div", { class: "page" }, [
     h("div", { class: "page-title" }, "ユーザーを選択"),
@@ -45,6 +46,7 @@ export function renderLogin() {
           h("div", { class: "icon" }, "⏳"),
           h("div", { class: "msg" }, "データを取得中、または通信エラーです。少し待ってから再読み込みしてください。"),
           err ? h("div", { class: "field-hint", style: "margin-top:10px; color:var(--color-danger); word-break:break-all;" }, `エラー内容: ${err}`) : null,
+          h("div", { class: "field-hint", style: "margin-top:10px; word-break:break-all;" }, `診断情報: 最終更新=${diag.lastRefreshAt || "未実行"} / 件数=${JSON.stringify(diag.counts)}`),
         ])
       : null,
     grid,

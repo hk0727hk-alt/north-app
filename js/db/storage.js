@@ -179,31 +179,49 @@ async function ensureSeeded() {
 }
 
 let pollTimer = null;
-let lastError = null;
+let lastRefreshAt = null;
+const lastErrors = {};
+
+export function getDiagnostics() {
+  return {
+    lastRefreshAt,
+    counts: Object.fromEntries(COLLECTIONS.map((name) => [name, (cache[name] || []).length])),
+    errors: { ...lastErrors },
+  };
+}
 
 export function getLastError() {
-  return lastError;
+  const entries = Object.entries(lastErrors);
+  if (!entries.length) return null;
+  return entries.map(([name, msg]) => `${name}: ${msg}`).join(" / ");
+}
+
+function describeError(err) {
+  if (err instanceof DOMException && err.name === "AbortError") return "timeout";
+  return err?.message || String(err);
 }
 
 async function refreshAll() {
   const results = await Promise.allSettled(COLLECTIONS.map((name) => fsListCollection(name)));
-  let anyOk = false;
   results.forEach((result, i) => {
+    const name = COLLECTIONS[i];
     if (result.status === "fulfilled") {
-      cache[COLLECTIONS[i]] = result.value;
-      anyOk = true;
+      cache[name] = result.value;
+      delete lastErrors[name];
     } else {
-      console.error(`Firestore refresh failed for ${COLLECTIONS[i]}`, result.reason);
-      lastError = `${COLLECTIONS[i]}: ${result.reason?.message || result.reason}`;
+      console.error(`Firestore refresh failed for ${name}`, result.reason);
+      lastErrors[name] = describeError(result.reason);
     }
   });
-  if (anyOk) lastError = null;
   try {
     const config = await fsGetDoc(CONFIG_COLLECTION, CONFIG_DOC_ID);
     cache.config = config || { masterPin: "0000", accessCode: "0000" };
+    delete lastErrors.config;
   } catch (err) {
     console.error("Firestore config refresh failed", err);
+    lastErrors.config = describeError(err);
   }
+  lastRefreshAt = new Date().toISOString();
   notify();
 }
 
