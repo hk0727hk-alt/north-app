@@ -775,14 +775,24 @@ function fromFirestoreFields(fields) {
 }
 
 /* --- Plain REST calls (no SDK, no persistent connection) --- */
-async function fetchWithTimeout(url, options, ms = 6000) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(t);
-  }
+// Race against a plain setTimeout instead of relying on AbortController —
+// on at least one real device, aborting the fetch did not make it reject,
+// leaving the caller stuck forever even past the timeout. Racing always
+// moves on once the timer fires, whether or not the fetch itself ever
+// settles.
+function fetchWithTimeout(url, options, ms = 6000) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const t = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("timeout"));
+    }, ms);
+    fetch(url, options).then(
+      (res) => { if (!settled) { settled = true; clearTimeout(t); resolve(res); } },
+      (err) => { if (!settled) { settled = true; clearTimeout(t); reject(err); } }
+    );
+  });
 }
 
 async function fsListCollection(name) {
