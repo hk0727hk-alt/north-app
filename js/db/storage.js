@@ -1,6 +1,11 @@
 const PROJECT_ID = "north-app-web";
+const API_KEY = "AIzaSyAtcgZII2a3grevgwOGdEbXKpCT_va4Keo";
 const BASE_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const POLL_INTERVAL_MS = 4000;
+
+function withKey(url) {
+  return url + (url.includes("?") ? "&" : "?") + "key=" + API_KEY;
+}
 
 const LOCAL_PREFIX = "northApp:";
 const COLLECTIONS = ["users", "vehicles", "vehicleLogs", "vehicleInspections", "vehicleIssues", "tools", "toolCheckouts"];
@@ -94,7 +99,7 @@ async function fetchWithTimeout(url, options, ms = 8000) {
 }
 
 async function fsListCollection(name) {
-  const res = await fetchWithTimeout(`${BASE_URL}/${name}?pageSize=300`);
+  const res = await fetchWithTimeout(withKey(`${BASE_URL}/${name}?pageSize=300`));
   if (!res.ok) throw new Error(`list ${name} failed: ${res.status}`);
   const data = await res.json();
   return (data.documents || []).map((d) => {
@@ -104,7 +109,7 @@ async function fsListCollection(name) {
 }
 
 async function fsGetDoc(name, id) {
-  const res = await fetchWithTimeout(`${BASE_URL}/${name}/${id}`);
+  const res = await fetchWithTimeout(withKey(`${BASE_URL}/${name}/${id}`));
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`get ${name}/${id} failed: ${res.status}`);
   const d = await res.json();
@@ -112,7 +117,7 @@ async function fsGetDoc(name, id) {
 }
 
 async function fsSetDoc(name, id, data) {
-  const res = await fetchWithTimeout(`${BASE_URL}/${name}/${id}`, {
+  const res = await fetchWithTimeout(withKey(`${BASE_URL}/${name}/${id}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fields: toFirestoreFields(data) }),
@@ -122,7 +127,7 @@ async function fsSetDoc(name, id, data) {
 
 async function fsUpdateDoc(name, id, patch) {
   const mask = Object.keys(patch).map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join("&");
-  const res = await fetchWithTimeout(`${BASE_URL}/${name}/${id}?${mask}`, {
+  const res = await fetchWithTimeout(withKey(`${BASE_URL}/${name}/${id}?${mask}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fields: toFirestoreFields(patch) }),
@@ -131,7 +136,7 @@ async function fsUpdateDoc(name, id, patch) {
 }
 
 async function fsDeleteDoc(name, id) {
-  const res = await fetchWithTimeout(`${BASE_URL}/${name}/${id}`, { method: "DELETE" });
+  const res = await fetchWithTimeout(withKey(`${BASE_URL}/${name}/${id}`), { method: "DELETE" });
   if (!res.ok && res.status !== 404) throw new Error(`delete ${name}/${id} failed: ${res.status}`);
 }
 
@@ -174,16 +179,25 @@ async function ensureSeeded() {
 }
 
 let pollTimer = null;
+let lastError = null;
+
+export function getLastError() {
+  return lastError;
+}
 
 async function refreshAll() {
   const results = await Promise.allSettled(COLLECTIONS.map((name) => fsListCollection(name)));
+  let anyOk = false;
   results.forEach((result, i) => {
     if (result.status === "fulfilled") {
       cache[COLLECTIONS[i]] = result.value;
+      anyOk = true;
     } else {
       console.error(`Firestore refresh failed for ${COLLECTIONS[i]}`, result.reason);
+      lastError = `${COLLECTIONS[i]}: ${result.reason?.message || result.reason}`;
     }
   });
+  if (anyOk) lastError = null;
   try {
     const config = await fsGetDoc(CONFIG_COLLECTION, CONFIG_DOC_ID);
     cache.config = config || { masterPin: "0000", accessCode: "0000" };
