@@ -199,24 +199,10 @@ function fromFirestoreFields(fields) {
 }
 
 /* --- Plain REST calls (no SDK, no persistent connection) --- */
-// Race against a plain setTimeout instead of relying on AbortController —
-// on at least one real device, aborting the fetch did not make it reject,
-// leaving the caller stuck forever even past the timeout. Racing always
-// moves on once the timer fires, whether or not the fetch itself ever
-// settles.
-function fetchWithTimeout(url, options, ms = 6000) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const t = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      reject(new Error("timeout"));
-    }, ms);
-    fetch(url, options).then(
-      (res) => { if (!settled) { settled = true; clearTimeout(t); resolve(res); } },
-      (err) => { if (!settled) { settled = true; clearTimeout(t); reject(err); } }
-    );
-  });
+// TEMP DIAGNOSTIC: plain passthrough, no timeout wrapper at all — testing
+// whether the wrapper itself is somehow the problem on the affected device.
+function fetchWithTimeout(url, options) {
+  return fetch(url, options);
 }
 
 async function fsListCollection(name) {
@@ -1251,6 +1237,16 @@ function renderLogin() {
   const err = getLastError();
   const diag = getDiagnostics();
 
+  const clock = h("div", { class: "field-hint", style: "margin-top:10px; font-weight:700;" }, "0");
+  let sec = 0;
+  const clockTimer = setInterval(() => {
+    sec += 1;
+    clock.textContent = `このページの経過秒数(独立カウンター): ${sec}`;
+  }, 1000);
+  // this page gets replaced wholesale on every render; drop the old timer
+  // rather than let it pile up in the background.
+  setTimeout(() => { if (!document.body.contains(clock)) clearInterval(clockTimer); }, 60000);
+
   return h("div", { class: "page" }, [
     h("div", { class: "page-title" }, "ユーザーを選択"),
     current ? h("div", { class: "field-hint", style: "margin-bottom:14px;" }, `現在: ${current.name} でログイン中`) : null,
@@ -1261,6 +1257,7 @@ function renderLogin() {
           err ? h("div", { class: "field-hint", style: "margin-top:10px; color:var(--color-danger); word-break:break-all;" }, `エラー内容: ${err}`) : null,
           h("div", { class: "field-hint", style: "margin-top:10px; word-break:break-all;" }, `診断情報: 開始=${diag.refreshStartedAt || "未実行"} / 最終更新=${diag.lastRefreshAt || "未完了"} / 取得中=${diag.currentlyFetching || "なし"}`),
           h("div", { class: "field-hint", style: "margin-top:6px; word-break:break-all;" }, `件数=${JSON.stringify(diag.counts)}`),
+          clock,
         ])
       : null,
     grid,
