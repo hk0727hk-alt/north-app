@@ -88,10 +88,19 @@ function fromFirestoreFields(fields) {
 }
 
 /* --- Plain REST calls (no SDK, no persistent connection) --- */
-// TEMP DIAGNOSTIC: plain passthrough, no timeout wrapper at all — testing
-// whether the wrapper itself is somehow the problem on the affected device.
-function fetchWithTimeout(url, options) {
-  return fetch(url, options);
+function fetchWithTimeout(url, options, ms = 6000) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const t = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("timeout"));
+    }, ms);
+    fetch(url, options).then(
+      (res) => { if (!settled) { settled = true; clearTimeout(t); resolve(res); } },
+      (err) => { if (!settled) { settled = true; clearTimeout(t); reject(err); } }
+    );
+  });
 }
 
 async function fsListCollection(name) {
