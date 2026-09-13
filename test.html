@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>通信テスト</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; font-size: 18px; line-height: 1.8; }
+  #timer { font-size: 40px; font-weight: bold; }
+  #out { white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<div>この画面はアプリとは無関係の、単純な通信テストです。</div>
+<div id="timer">0</div>
+<div>秒経過(この数字が増えていれば時計は動いています)</div>
+<hr>
+<div>Firestoreへの通信結果:</div>
+<div id="out">fetch: 待機中...</div>
+<script>
+  let sec = 0;
+  setInterval(() => {
+    sec++;
+    document.getElementById('timer').textContent = sec;
+  }, 1000);
+
+  const out = document.getElementById('out');
+  const t0 = Date.now();
+  const url = 'https://firestore.googleapis.com/v1/projects/north-app-web/databases/(default)/documents/users?pageSize=300&key=AIzaSyAtcgZII2a3grevgwOGdEbXKpCT_va4Keo';
+
+  fetch(url)
+    .then((r) => {
+      out.textContent = 'HTTPステータス受信: ' + r.status + ' (' + (Date.now() - t0) + 'ms経過)';
+      return r.json();
+    })
+    .then((data) => {
+      out.textContent = '成功: ' + (Date.now() - t0) + 'ms かかりました。件数=' + ((data.documents || []).length);
+    })
+    .catch((err) => {
+      out.textContent = '失敗: ' + (Date.now() - t0) + 'ms経過後にエラー。内容=' + err.message;
+    });
+</script>
+</body>
+</html>
